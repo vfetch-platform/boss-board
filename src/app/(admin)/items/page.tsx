@@ -4,12 +4,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiFetch, ApiError } from '@/lib/api';
 import { toast } from '@/lib/toast';
-import { fmt } from '@/lib/utils';
+import { fmt, copyText } from '@/lib/utils';
 import { Badge } from '@/components/Badge';
 import { Modal } from '@/components/Modal';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Pagination } from '@/components/Pagination';
-import type { Item, PaginatedResponse } from '@/types';
+import type { Item, Venue, PaginatedResponse } from '@/types';
 
 const CATEGORIES = ['phones', 'wallets', 'keys', 'bags', 'clothing', 'jewelry', 'electronics', 'cards', 'documents', 'other'];
 const STATUSES = ['available', 'claimed', 'collected', 'expired'];
@@ -43,6 +43,26 @@ export default function ItemsPage() {
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [form, setForm] = useState<ItemForm>(emptyForm());
   const [confirm, setConfirm] = useState<{ id: string; title: string } | null>(null);
+  const [venueMap, setVenueMap] = useState<Record<string, Venue>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Load venue list once to resolve venue_id → venue details
+  useEffect(() => {
+    apiFetch<PaginatedResponse<Venue>>('GET', '/venues?limit=200')
+      .then((data) => {
+        const map: Record<string, Venue> = {};
+        data.data.forEach((v) => { map[v.id] = v; });
+        setVenueMap(map);
+      })
+      .catch(() => {}); // non-critical; falls back to UUID display
+  }, []);
+
+  function handleCopyId(id: string) {
+    copyText(id, () => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1500);
+    });
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -134,10 +154,28 @@ export default function ItemsPage() {
               <tr><td colSpan={7} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>No items found</td></tr>
             ) : items.map((i) => (
               <tr key={i.id}>
-                <td style={td}><span style={{ maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }} title={i.title}>{i.title}</span></td>
+                <td style={td}>
+                  <span style={{ maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }} title={i.title}>{i.title}</span>
+                  <button
+                    onClick={() => handleCopyId(i.id)}
+                    title="Copy item ID"
+                    style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-alt, rgba(255,255,255,.06))', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 10, color: copiedId === i.id ? 'var(--success)' : 'var(--text-muted)', fontFamily: 'monospace', transition: 'color .2s' }}
+                  >
+                    {copiedId === i.id ? '✓ copied' : `${i.id.slice(0, 8)}…`}
+                  </button>
+                </td>
                 <td style={td}><Badge value={i.category} /></td>
                 <td style={td}><Badge value={i.status} /></td>
-                <td style={{ ...td, fontSize: 11, color: 'var(--text-muted)', maxWidth: 120 }}>{i.venue_id ? i.venue_id.slice(0, 8) + '…' : '—'}</td>
+                <td style={{ ...td, maxWidth: 160 }}>
+                  {i.venue_id && venueMap[i.venue_id] ? (
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{venueMap[i.venue_id].name}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{venueMap[i.venue_id].city}</div>
+                    </div>
+                  ) : i.venue_id ? (
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'monospace' }}>{i.venue_id.slice(0, 8)}…</span>
+                  ) : '—'}
+                </td>
                 <td style={td}>{fmt(i.date_found)}</td>
                 <td style={td}>{fmt(i.created_at)}</td>
                 <td style={td}>
@@ -155,6 +193,33 @@ export default function ItemsPage() {
 
       <Modal title="Edit Item" open={modalOpen} onClose={() => setModalOpen(false)} onSave={handleSave} saving={saving}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          {/* Copyable ID */}
+          <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>Item ID</span>
+            <button
+              onClick={() => editItem && handleCopyId(editItem.id)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface-alt, rgba(255,255,255,.06))', border: '1px solid var(--border)', borderRadius: 4, padding: '3px 10px', cursor: 'pointer', fontSize: 12, color: editItem && copiedId === editItem.id ? 'var(--success)' : 'var(--text-muted)', fontFamily: 'monospace', transition: 'color .2s' }}
+              title="Click to copy full ID"
+            >
+              {editItem && copiedId === editItem.id ? '✓ copied' : editItem?.id ?? ''}
+            </button>
+          </div>
+
+          {/* Venue info (read-only) */}
+          {editItem?.venue_id && venueMap[editItem.venue_id] && (() => {
+            const v = venueMap[editItem.venue_id!]!;
+            return (
+              <div style={{ gridColumn: '1 / -1', background: 'rgba(255,255,255,.04)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '12px 16px' }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.6px', color: 'var(--text-muted)', marginBottom: 8 }}>Venue</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{v.name}</span>
+                  <Badge value={v.status} />
+                </div>
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>{v.address}, {v.city}{v.postal_code ? ` ${v.postal_code}` : ''}</div>
+              </div>
+            );
+          })()}
+
           <F label="Title" id="title" full />
           <F label="Description" id="description" full rows={3} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
