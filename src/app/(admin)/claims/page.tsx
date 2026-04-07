@@ -35,6 +35,7 @@ export default function ClaimsPage() {
   const [saving, setSaving] = useState(false);
   const [confirm, setConfirm] = useState<{ id: string } | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,7 +125,17 @@ export default function ClaimsPage() {
                     {copiedId === c.id ? '✅' : '📋'}
                   </button>
                 </td>
-                <td style={{ ...td, fontSize: 11, color: 'var(--text-muted)' }}>{c.item_id ? c.item_id.slice(0, 8) + '…' : '—'}</td>
+                <td style={{ ...td, fontSize: 11, color: 'var(--text-muted)' }}>
+                  {c.item_id ? (
+                    <button
+                      onClick={() => copyText(c.item_id, () => { setCopiedItemId(c.item_id); setTimeout(() => setCopiedItemId(null), 1500); })}
+                      style={{ background: 'var(--surface-alt, rgba(255,255,255,.06))', border: '1px solid var(--border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: 10, color: copiedItemId === c.item_id ? 'var(--success)' : 'var(--text-muted)', fontFamily: 'monospace', transition: 'color .2s' }}
+                      title="Copy item ID"
+                    >
+                      {copiedItemId === c.item_id ? '✓ copied' : `${c.item_id.slice(0, 8)}…`}
+                    </button>
+                  ) : '—'}
+                </td>
                 <td style={{ ...td, fontSize: 11, color: 'var(--text-muted)' }}>{c.user_id ? c.user_id.slice(0, 8) + '…' : '—'}</td>
                 <td style={td}><Badge value={c.status} /></td>
                 <td style={td}><Badge value={c.payment_status} /></td>
@@ -151,7 +162,13 @@ export default function ClaimsPage() {
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>Item ID</label>
-              <input value={modal.claim.item_id} readOnly className="admin-input" style={roStyle} />
+              <button
+                onClick={() => copyText(modal.claim.item_id, () => { setCopiedItemId(modal.claim.item_id); setTimeout(() => setCopiedItemId(null), 1500); })}
+                style={{ textAlign: 'left', background: 'var(--surface-alt, rgba(255,255,255,.06))', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', cursor: 'pointer', fontSize: 12, color: copiedItemId === modal.claim.item_id ? 'var(--success)' : 'var(--text-muted)', fontFamily: 'monospace', transition: 'color .2s' }}
+                title="Click to copy item ID"
+              >
+                {copiedItemId === modal.claim.item_id ? '✓ copied' : modal.claim.item_id}
+              </button>
             </div>
             <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-muted)' }}>User ID</label>
